@@ -37,6 +37,18 @@ public class LibraryScanner(IOptions<SyncConfig> config, ILogger<LibraryScanner>
         for (var i = 0; i < totalDirectories; i++)
         {
             var dir = allDirectories[i];
+
+            var relativePath = Path.GetRelativePath(basePath, dir);
+            var depth = relativePath == "."
+                ? 0
+                : relativePath.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries).Length;
+            
+            if (depth < 2)
+            {
+                logger.LogDebug("Skipping dir '{Dir}': not at album depth.", dir);
+                continue;
+            }
+            
             var current = i + 1;
             var progress = totalDirectories == 0 ? 1d : (double)current / totalDirectories;
 
