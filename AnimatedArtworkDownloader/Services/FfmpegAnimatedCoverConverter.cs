@@ -17,7 +17,7 @@ public class FfmpegAnimatedCoverConverter(
         var ffmpegBinary = string.IsNullOrWhiteSpace(config.Value.FfmpegBinaryPath)
             ? "ffmpeg"
             : config.Value.FfmpegBinaryPath;
-        var webpQuality = Math.Clamp(config.Value.WebpQuality, 0, 100);
+        //var webpQuality = Math.Clamp(config.Value.WebpQuality, 0, 100);
 
         var selectedVariant = await ResolvePreferredVariantAsync(playlistUrl, cancellationToken);
 
@@ -25,40 +25,31 @@ public class FfmpegAnimatedCoverConverter(
         Directory.CreateDirectory(outputDirectory);
 
         var tempVideoPath = Path.Combine(outputDirectory, $".{Path.GetFileNameWithoutExtension(outputFilePath)}.{Guid.NewGuid():N}.source.mp4");
-        var tempWebpPath = Path.Combine(outputDirectory, $".{Path.GetFileNameWithoutExtension(outputFilePath)}.{Guid.NewGuid():N}.tmp.webp");
+        //var tempWebpPath = Path.Combine(outputDirectory, $".{Path.GetFileNameWithoutExtension(outputFilePath)}.{Guid.NewGuid():N}.tmp.webp");
 
         try
         {
+            // Stream copy only: no re-encode, so no quality loss and it's fast.
             var remuxArgs =
-                $"-y -i \"{selectedVariant.Uri}\" -c copy -bsf:a aac_adtstoasc \"{tempVideoPath}\"";
+                $"-y -i \"{selectedVariant.Uri}\" -c copy -an -movflags +faststart \"{tempVideoPath}\"";
             await RunFfmpegAsync(ffmpegBinary, remuxArgs, "remux", cancellationToken);
-
+        
             if (!File.Exists(tempVideoPath))
             {
                 throw new InvalidOperationException($"ffmpeg remux completed without producing {tempVideoPath}");
             }
-
-            var convertArgs =
-                $"-y -i \"{tempVideoPath}\" -vf \"scale=-1:-1:flags=lanczos\" -c:v libwebp -compression_level 6 -q:v {webpQuality} -loop 0 -an \"{tempWebpPath}\"";
-            await RunFfmpegAsync(ffmpegBinary, convertArgs, "webp-convert", cancellationToken);
-
-            if (!File.Exists(tempWebpPath))
-            {
-                throw new InvalidOperationException($"ffmpeg conversion completed without producing {tempWebpPath}");
-            }
-
+        
             if (File.Exists(outputFilePath))
             {
                 File.Delete(outputFilePath);
             }
-
-            File.Move(tempWebpPath, outputFilePath);
-            logger.LogDebug("Moved temp webp from {TempPath} to {FinalPath}", tempWebpPath, outputFilePath);
+        
+            File.Move(tempVideoPath, outputFilePath);
+            logger.LogDebug("Moved temp mp4 from {TempPath} to {FinalPath}", tempVideoPath, outputFilePath);
         }
         finally
         {
             CleanupWorkingFile(tempVideoPath);
-            CleanupWorkingFile(tempWebpPath);
         }
     }
 
